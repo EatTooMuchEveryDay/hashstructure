@@ -2,6 +2,7 @@ package hashstructure
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"testing"
 	"time"
@@ -667,6 +668,84 @@ func TestHash_hashable(t *testing.T) {
 			if one == 0 {
 				t.Fatalf("zero hash: %#v", tc.One)
 			}
+
+			// Compare
+			if (one == two) != tc.Match {
+				t.Fatalf("bad, expected: %#v\n\n%#v\n\n%#v", tc.Match, tc.One, tc.Two)
+			}
+		})
+	}
+}
+
+func TestHash_slicesAsSet(t *testing.T) {
+	cases := []struct {
+		One, Two interface{}
+		Match    bool
+		Err      string
+	}{
+		{
+			[]string{"1", "2"},
+			[]string{"2", "1"},
+			true,
+			"",
+		},
+		{
+			[]string{"1", "2"},
+			[]string{"5", "6"},
+			false,
+			"",
+		},
+		{
+			[]string{"1", "2", "2"},
+			[]string{"1"},
+			false,
+			"",
+		},
+		{
+			[][]string{{"1"}, {"1", "3"}},
+			[][]string{{"2"}, {"2", "3"}},
+			false,
+			"",
+		},
+		{
+			// These are arrays not slices
+			[2]string{"1", "2"},
+			[2]string{"2", "1"},
+			false,
+			"",
+		},
+	}
+
+	for i, tc := range cases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			options := &HashOptions{SlicesAsSets: true, Hasher: fnv.New64a()}
+			one, err := Hash(tc.One, testFormat, options)
+			if tc.Err != "" {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+
+				if !strings.Contains(err.Error(), tc.Err) {
+					t.Fatalf("expected error to contain %q, got: %s", tc.Err, err)
+				}
+
+				return
+			}
+			if err != nil {
+				t.Fatalf("Failed to hash %#v: %s", tc.One, err)
+			}
+
+			two, err := Hash(tc.Two, testFormat, options)
+			if err != nil {
+				t.Fatalf("Failed to hash %#v: %s", tc.Two, err)
+			}
+
+			// Zero is always wrong
+			if one == 0 {
+				t.Fatalf("zero hash: %#v", tc.One)
+			}
+
+			t.Logf("one: %d, two: %d", one, two)
 
 			// Compare
 			if (one == two) != tc.Match {

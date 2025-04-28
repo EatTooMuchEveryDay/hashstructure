@@ -389,8 +389,13 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 		// hash code.
 		var h uint64
 		var set bool
+		var hashMap map[uint64]uint64
 		if opts != nil {
 			set = (opts.Flags & visitFlagSet) != 0
+		}
+		set = set || w.sets
+		if set {
+			hashMap = make(map[uint64]uint64)
 		}
 		l := v.Len()
 		for i := 0; i < l; i++ {
@@ -399,16 +404,23 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 				return 0, err
 			}
 
-			if set || w.sets {
-				h = hashUpdateUnordered(h, current)
+			if set {
+				hashMap[current]++
 			} else {
 				h = hashUpdateOrdered(w.h, h, current)
 			}
 		}
 
-		if set && w.format != FormatV1 {
-			// Important: read the docs for hashFinishUnordered
-			h = hashFinishUnordered(w.h, h)
+		if set {
+			for current, occur := range hashMap {
+				fieldHash := hashUpdateOrdered(w.h, current, occur)
+				h = hashUpdateUnordered(h, fieldHash)
+			}
+
+			if w.format != FormatV1 {
+				// Important: read the docs for hashFinishUnordered
+				h = hashFinishUnordered(w.h, h)
+			}
 		}
 
 		return h, nil
@@ -453,11 +465,11 @@ func hashUpdateUnordered(a, b uint64) uint64 {
 // hashUpdateUnordered can effectively cancel out a previous change to the hash
 // result if the same hash value appears later on. For example, consider:
 //
-//   hashUpdateUnordered(hashUpdateUnordered("A", "B"), hashUpdateUnordered("A", "C")) =
-//   H("A") ^ H("B")) ^ (H("A") ^ H("C")) =
-//   (H("A") ^ H("A")) ^ (H("B") ^ H(C)) =
-//   H(B) ^ H(C) =
-//   hashUpdateUnordered(hashUpdateUnordered("Z", "B"), hashUpdateUnordered("Z", "C"))
+//	hashUpdateUnordered(hashUpdateUnordered("A", "B"), hashUpdateUnordered("A", "C")) =
+//	H("A") ^ H("B")) ^ (H("A") ^ H("C")) =
+//	(H("A") ^ H("A")) ^ (H("B") ^ H(C)) =
+//	H(B) ^ H(C) =
+//	hashUpdateUnordered(hashUpdateUnordered("Z", "B"), hashUpdateUnordered("Z", "C"))
 //
 // hashFinishUnordered "hardens" the result, so that encountering partially
 // overlapping input data later on in a different context won't cancel out.
