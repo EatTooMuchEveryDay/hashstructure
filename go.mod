@@ -1,3 +1,3 @@
-module github.com/EatTooMuchEveryDay/hashstructure/v2
+module github.com/EatTooMuchEveryDay/hashstructure
 
 go 1.14
